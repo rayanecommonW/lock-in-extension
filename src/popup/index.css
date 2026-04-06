@@ -1,0 +1,101 @@
+:root {
+  --bg: #f3e8d7;
+  --panel: #fff8ee;
+  --ink: #211b17;
+  --muted: #66574d;
+  --accent: #8f352c;
+  --accent-2: #265367;
+  --border: #d1bfac;
+  font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 340px;
+  background: radial-gradient(circle at 85% -20%, #e3ceb8, transparent 45%), var(--bg);
+  color: var(--ink);
+}
+
+.popupRoot {
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.popupHeader h1 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.popupHeader p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px;
+}
+
+.rowBetween {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.badge {
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.badge.on {
+  background: #d4e9d6;
+  color: #2a5c2f;
+}
+
+.badge.off {
+  background: #f0d8d4;
+  color: #7a2822;
+}
+
+.btnPrimary,
+.btnGhost {
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  padding: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btnPrimary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btnGhost {
+  background: var(--accent-2);
+  color: #f8f5f1;
+}
+
+.activeSite h2 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+}
+
+.activeSite p,
+.muted {
+  margin: 2px 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+}

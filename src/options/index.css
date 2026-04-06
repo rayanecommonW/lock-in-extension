@@ -1,0 +1,171 @@
+:root {
+  color-scheme: light;
+  --bg: #f4eee5;
+  --card: #fff9f2;
+  --ink: #1f1a17;
+  --accent: #9a3a2f;
+  --accent-2: #2f5e6d;
+  --border: #d6c6b6;
+  --muted: #5f5349;
+  font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 12% 10%, #efe0cd, transparent 35%),
+    radial-gradient(circle at 90% 0%, #e1d0be, transparent 40%),
+    var(--bg);
+  min-height: 100vh;
+}
+
+.layout {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 28px 16px 40px;
+}
+
+.header {
+  margin-bottom: 16px;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 2rem;
+}
+
+.header p {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 14px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 10px 30px rgba(41, 24, 10, 0.08);
+}
+
+h2 {
+  margin: 0 0 12px;
+}
+
+label {
+  display: block;
+  font-size: 0.92rem;
+  margin-bottom: 8px;
+  color: #3b312b;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  margin-top: 4px;
+  border: 1px solid #bcae9f;
+  border-radius: 10px;
+  padding: 10px;
+  background: #fffdf9;
+  color: var(--ink);
+}
+
+textarea {
+  resize: vertical;
+}
+
+.row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.row3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.btnRow {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+button {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btnPrimary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btnSecondary {
+  background: var(--accent-2);
+  color: #fff;
+}
+
+.btnGhost {
+  background: transparent;
+  border: 1px solid #76695f;
+  color: #3b322c;
+}
+
+.status {
+  margin-top: 8px;
+  min-height: 22px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid var(--border);
+  padding: 8px;
+  text-align: left;
+  vertical-align: top;
+  font-size: 0.9rem;
+}
+
+.pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  background: #e6d8ca;
+  color: #4f4137;
+}
+
+.footerNote {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+@media (max-width: 860px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
