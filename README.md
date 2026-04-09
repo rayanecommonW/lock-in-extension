@@ -1,5 +1,18 @@
 # Lock In Extension
 
+## Install Extension
+
+If you just want to use the extension, this is all you need.
+
+1. Download this repository as a ZIP and extract it.
+2. Open `chrome://extensions/` (or `edge://extensions/`).
+3. Enable **Developer mode**.
+4. Click **Load unpacked**.
+5. Select the `dist` folder.
+6. Done. The extension is now installed.
+
+---
+
 Lock In is a Chromium browser extension that helps limit distracting browsing with local-only data storage.
 
 You configure per-site rules:
@@ -84,33 +97,33 @@ For each visit/check:
 
 ## Tech Stack
 
-- Bun
+- Node.js + npm
 - CRXJS + Vite
 - React + TypeScript
 
-## Setup and Run
+## Developer Setup
 
 ### Requirements
 
-- Bun installed
+- Node.js LTS installed
 - Chromium browser (Chrome, Edge, Brave, Opera)
 
 ### Install dependencies
 
 ```bash
-bun install
+npm install
 ```
 
 ### Build extension
 
 ```bash
-bun run build
+npm run build
 ```
 
 ### Dev watch mode
 
 ```bash
-bun run dev
+npm run dev
 ```
 
 ### Load unpacked extension (Chromium)
