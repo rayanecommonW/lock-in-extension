@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { openOptionsPage, queryActiveTab, sendRuntimeMessage } from '@/shared/chrome-api'
 
 type DashboardPayload = {
   settings: {
@@ -16,14 +17,21 @@ type DashboardPayload = {
 export default function App() {
   const [data, setData] = useState<DashboardPayload | null>(null)
   const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState('')
 
   const load = async () => {
-    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true })
-    const payload = await chrome.runtime.sendMessage({
-      type: 'GET_DASHBOARD_DATA',
-      activeUrl: activeTab?.url,
-    }) as DashboardPayload
-    setData(payload)
+    try {
+      const activeTab = await queryActiveTab()
+      const payload = await sendRuntimeMessage<DashboardPayload>({
+        type: 'GET_DASHBOARD_DATA',
+        activeUrl: activeTab?.url,
+      })
+      setData(payload)
+      setStatus('')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      setStatus(`Failed to load popup data: ${message}`)
+    }
   }
 
   useEffect(() => {
@@ -35,16 +43,32 @@ export default function App() {
       return
     }
     setBusy(true)
-    await chrome.runtime.sendMessage({
-      type: 'UPDATE_SETTINGS',
-      patch: { extensionEnabled: !data.settings.extensionEnabled },
-    })
-    await load()
-    setBusy(false)
+    try {
+      const result = await sendRuntimeMessage<{ success: boolean }>({
+        type: 'UPDATE_SETTINGS',
+        patch: { extensionEnabled: !data.settings.extensionEnabled },
+      })
+
+      if (!result.success) {
+        setStatus('Failed to update extension state.')
+        return
+      }
+
+      await load()
+      setStatus('')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      setStatus(`Failed to update extension state: ${message}`)
+    } finally {
+      setBusy(false)
+    }
   }
 
   const openSettings = () => {
-    void chrome.runtime.openOptionsPage()
+    void openOptionsPage().catch((error) => {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      setStatus(`Failed to open settings: ${message}`)
+    })
   }
 
   return (
@@ -61,7 +85,7 @@ export default function App() {
             {data?.settings.extensionEnabled ? 'ON' : 'OFF'}
           </span>
         </div>
-        <button className="btnPrimary" disabled={busy} onClick={() => void toggleEnabled()}>
+        <button className="btnPrimary" disabled={busy || !data} onClick={() => void toggleEnabled()}>
           {data?.settings.extensionEnabled ? 'Disable extension' : 'Enable extension'}
         </button>
       </section>
@@ -82,6 +106,8 @@ export default function App() {
           <p className="muted">Current tab is not tracked.</p>
         )}
       </section>
+
+      {status && <p className="muted">{status}</p>}
 
       <button className="btnGhost" onClick={openSettings}>Open full settings</button>
     </main>

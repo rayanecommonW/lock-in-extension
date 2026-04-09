@@ -1,4 +1,5 @@
 import type { AccessDecision, BlockReason, ExtensionRequest } from '@/shared/types'
+import { sendRuntimeMessage } from '@/shared/chrome-api'
 
 const OVERLAY_ID = 'lock-in-overlay-root'
 const HEARTBEAT_INTERVAL_MS = 1000
@@ -7,7 +8,7 @@ let overlayKind: 'none' | 'reflect' | 'block' = 'none'
 let heartbeatHandle: number | null = null
 
 function sendMessage<T>(payload: ExtensionRequest): Promise<T> {
-  return chrome.runtime.sendMessage(payload) as Promise<T>
+  return sendRuntimeMessage<T>(payload)
 }
 
 function getOrCreateOverlayContainer(): ShadowRoot {
@@ -42,7 +43,7 @@ function removeOverlay(): void {
 function reasonLabel(reason?: BlockReason): string {
   switch (reason) {
     case 'daily_limit':
-      return 'Daily time limit reached.'
+      return 'Max limit per day reached.'
     case 'session_limit':
       return 'Session time limit reached.'
     case 'open_limit':
@@ -291,8 +292,13 @@ function startHeartbeat(): void {
 }
 
 async function bootstrap(): Promise<void> {
-  const decision = await requestAccess('navigate')
-  await applyDecision(decision)
+  try {
+    const decision = await requestAccess('navigate')
+    await applyDecision(decision)
+  } catch {
+    // Ignore transient startup messaging errors while extension worker spins up.
+  }
+
   startHeartbeat()
 }
 

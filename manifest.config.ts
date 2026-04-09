@@ -25,11 +25,11 @@ export default defineManifest({
     '<all_urls>',
   ],
   background: {
-    service_worker: 'src/background/main.ts',
+    service_worker: 'src/background/service-worker.ts',
     type: 'module',
   },
   content_scripts: [{
-    js: ['src/content/main.ts'],
+    js: ['src/content/content-script.ts'],
     matches: ['http://*/*', 'https://*/*'],
     run_at: 'document_start',
   }],

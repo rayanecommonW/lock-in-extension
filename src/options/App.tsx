@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { sendRuntimeMessage } from '@/shared/chrome-api'
 import type { DailyStat, Settings, SiteConfig, StorageState } from '@/shared/types'
 
 type FormState = {
@@ -58,10 +59,15 @@ export default function App() {
   const orderedSites = useMemo(() => Object.values(siteConfigs).sort((a, b) => a.domain.localeCompare(b.domain)), [siteConfigs])
 
   const load = async () => {
-    const data = await chrome.runtime.sendMessage({ type: 'GET_OPTIONS_DATA' }) as StorageState
-    setSettings(data.settings)
-    setSiteConfigs(data.siteConfigs)
-    setDailyStats(data.dailyStats)
+    try {
+      const data = await sendRuntimeMessage<StorageState>({ type: 'GET_OPTIONS_DATA' })
+      setSettings(data.settings)
+      setSiteConfigs(data.siteConfigs)
+      setDailyStats(data.dailyStats)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      setStatus(`Failed to load settings: ${message}`)
+    }
   }
 
   useEffect(() => {
@@ -90,7 +96,14 @@ export default function App() {
       bonusMode: form.bonusMode,
     }
 
-    const result = await chrome.runtime.sendMessage({ type: 'UPSERT_SITE', config: payload }) as { success: boolean; error?: string }
+    let result: { success: boolean; error?: string }
+    try {
+      result = await sendRuntimeMessage<{ success: boolean; error?: string }>({ type: 'UPSERT_SITE', config: payload })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      setStatus(`Save failed: ${message}`)
+      return
+    }
 
     if (!result.success) {
       setStatus(`Save failed: ${result.error ?? 'unknown error'}`)
@@ -116,18 +129,39 @@ export default function App() {
   }
 
   const onDelete = async (domain: string) => {
-    await chrome.runtime.sendMessage({ type: 'DELETE_SITE', domain })
-    setStatus(`Deleted ${domain}`)
-    await load()
+    try {
+      const result = await sendRuntimeMessage<{ success: boolean }>({ type: 'DELETE_SITE', domain })
+      if (!result.success) {
+        setStatus(`Delete failed for ${domain}`)
+        return
+      }
+
+      setStatus(`Deleted ${domain}`)
+      await load()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      setStatus(`Delete failed for ${domain}: ${message}`)
+    }
   }
 
   const onToggleGlobal = async (enabled: boolean) => {
-    await chrome.runtime.sendMessage({
-      type: 'UPDATE_SETTINGS',
-      patch: { extensionEnabled: enabled },
-    })
-    setSettings((prev) => prev ? { ...prev, extensionEnabled: enabled } : prev)
-    setStatus(enabled ? 'Extension enabled' : 'Extension disabled')
+    try {
+      const result = await sendRuntimeMessage<{ success: boolean }>({
+        type: 'UPDATE_SETTINGS',
+        patch: { extensionEnabled: enabled },
+      })
+
+      if (!result.success) {
+        setStatus('Failed to update extension state')
+        return
+      }
+
+      setSettings((prev) => prev ? { ...prev, extensionEnabled: enabled } : prev)
+      setStatus(enabled ? 'Extension enabled' : 'Extension disabled')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      setStatus(`Failed to update extension state: ${message}`)
+    }
   }
 
   const onUpdateInactivity = async (value: string) => {
@@ -136,13 +170,23 @@ export default function App() {
       return
     }
 
-    await chrome.runtime.sendMessage({
-      type: 'UPDATE_SETTINGS',
-      patch: { inactivityThresholdMinutes: parsed },
-    })
+    try {
+      const result = await sendRuntimeMessage<{ success: boolean }>({
+        type: 'UPDATE_SETTINGS',
+        patch: { inactivityThresholdMinutes: parsed },
+      })
 
-    setSettings((prev) => prev ? { ...prev, inactivityThresholdMinutes: parsed } : prev)
-    setStatus(`Inactivity reset set to ${parsed} min`)
+      if (!result.success) {
+        setStatus('Failed to update inactivity threshold')
+        return
+      }
+
+      setSettings((prev) => prev ? { ...prev, inactivityThresholdMinutes: parsed } : prev)
+      setStatus(`Inactivity reset set to ${parsed} min`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      setStatus(`Failed to update inactivity threshold: ${message}`)
+    }
   }
 
   return (
@@ -203,7 +247,7 @@ export default function App() {
 
             <div className="row3">
               <label>
-                Daily time limit (min)
+               Max limit per day (min)
                 <input
                   type="number"
                   min={0}
