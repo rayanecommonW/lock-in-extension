@@ -16,6 +16,11 @@ export interface DailyStat {
   usedMs: number
   openCount: number
   bonusMs: number
+  historyByDate?: Record<string, {
+    usedMs: number
+    openCount: number
+    bonusMs: number
+  }>
 }
 
 export interface DomainSession {
@@ -41,6 +46,27 @@ export interface StorageState {
   dailyStats: Record<string, DailyStat>
   sessions: Record<string, DomainSession>
   settings: Settings
+}
+
+export interface DashboardSummary {
+  domain: string
+  enabled: boolean
+  usedTodayMs: number
+  opensToday: number
+  dailyRemainingMs: number | null
+  sessionUsedMs: number
+  sessionRemainingMs: number | null
+}
+
+export interface DashboardData {
+  settings: {
+    extensionEnabled: boolean
+  }
+  totalSites: number
+  activeDomain: string | null
+  activeHasRule: boolean
+  activeSummary: DashboardSummary | null
+  summaries: DashboardSummary[]
 }
 
 export type AccessReason = 'navigate' | 'recheck'

@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { sendRuntimeMessage } from '@/shared/chrome-api'
+import ActivityBarChart from '@/options/components/ActivityBarChart'
+import { formatDurationMs } from '@/shared/format'
+import { toLocalDateKey } from '@/shared/utils'
 import type { DailyStat, Settings, SiteConfig, StorageState } from '@/shared/types'
 
 type FormState = {
@@ -24,6 +27,11 @@ const emptyForm: FormState = {
   bonusMode: 'strict',
 }
 
+type StatSlice = {
+  usedMs: number
+  openCount: number
+}
+
 function valueToNullableInt(value: string): number | null {
   const trimmed = value.trim()
   if (!trimmed) {
@@ -40,12 +48,80 @@ function minsLabel(value: number | null): string {
   return `${value} min`
 }
 
+function formatChartDateLabel(dateKey: string): string {
+  const parsed = new Date(`${dateKey}T00:00:00`)
+  if (Number.isNaN(parsed.getTime())) {
+    return dateKey
+  }
+
+  return parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+function buildRecentDateKeys(days: number): string[] {
+  const keys: string[] = []
+  const now = new Date()
+
+  for (let offset = 0; offset < days; offset += 1) {
+    const copy = new Date(now)
+    copy.setDate(now.getDate() - offset)
+    keys.push(toLocalDateKey(copy))
+  }
+
+  return keys
+}
+
+function statSliceForDate(stat: DailyStat, dateKey: string): StatSlice {
+  if (stat.dateKey === dateKey) {
+    return {
+      usedMs: stat.usedMs,
+      openCount: stat.openCount,
+    }
+  }
+
+  const snapshot = stat.historyByDate?.[dateKey]
+  if (!snapshot) {
+    return { usedMs: 0, openCount: 0 }
+  }
+
+  return {
+    usedMs: snapshot.usedMs,
+    openCount: snapshot.openCount,
+  }
+}
+
+function sumUsedForDates(stat: DailyStat, dateKeys: string[]): number {
+  return dateKeys.reduce((sum, dateKey) => sum + statSliceForDate(stat, dateKey).usedMs, 0)
+}
+
+function totalUsed(stat: DailyStat): number {
+  let sum = stat.usedMs
+  const history = stat.historyByDate ?? {}
+  for (const dateKey of Object.keys(history)) {
+    if (dateKey !== stat.dateKey) {
+      sum += history[dateKey].usedMs
+    }
+  }
+  return sum
+}
+
+function totalOpens(stat: DailyStat): number {
+  let sum = stat.openCount
+  const history = stat.historyByDate ?? {}
+  for (const dateKey of Object.keys(history)) {
+    if (dateKey !== stat.dateKey) {
+      sum += history[dateKey].openCount
+    }
+  }
+  return sum
+}
+
 function readDailyStat(dailyStats: Record<string, DailyStat>, domain: string): DailyStat {
   return dailyStats[domain] ?? {
     dateKey: '',
     usedMs: 0,
     openCount: 0,
     bonusMs: 0,
+    historyByDate: {},
   }
 }
 
@@ -55,23 +131,104 @@ export default function App() {
   const [dailyStats, setDailyStats] = useState<Record<string, DailyStat>>({})
   const [form, setForm] = useState<FormState>(emptyForm)
   const [status, setStatus] = useState('')
+  const loadInFlightRef = useRef(false)
 
   const orderedSites = useMemo(() => Object.values(siteConfigs).sort((a, b) => a.domain.localeCompare(b.domain)), [siteConfigs])
 
-  const load = async () => {
+  const activity = useMemo(() => {
+    const todayKey = toLocalDateKey()
+    const weekKeys = buildRecentDateKeys(7)
+    const monthKeys = buildRecentDateKeys(30)
+    const chartDateKeys = [...monthKeys].reverse()
+
+    const siteRows = orderedSites.map((site) => {
+      const stat = readDailyStat(dailyStats, site.domain)
+      const todaySlice = statSliceForDate(stat, todayKey)
+
+      return {
+        domain: site.domain,
+        todayMs: todaySlice.usedMs,
+        weekMs: sumUsedForDates(stat, weekKeys),
+        monthMs: sumUsedForDates(stat, monthKeys),
+        totalMs: totalUsed(stat),
+        todayOpens: todaySlice.openCount,
+        totalOpens: totalOpens(stat),
+      }
+    }).sort((a, b) => b.todayMs - a.todayMs)
+
+    const chartPoints = chartDateKeys.map((dateKey) => {
+      const perDate = orderedSites.reduce((acc, site) => {
+        const stat = readDailyStat(dailyStats, site.domain)
+        const slice = statSliceForDate(stat, dateKey)
+
+        return {
+          usedMs: acc.usedMs + slice.usedMs,
+          openCount: acc.openCount + slice.openCount,
+        }
+      }, {
+        usedMs: 0,
+        openCount: 0,
+      })
+
+      return {
+        dateKey,
+        label: formatChartDateLabel(dateKey),
+        usedMs: perDate.usedMs,
+        openCount: perDate.openCount,
+      }
+    })
+
+    const totals = siteRows.reduce((acc, row) => ({
+      todayMs: acc.todayMs + row.todayMs,
+      weekMs: acc.weekMs + row.weekMs,
+      monthMs: acc.monthMs + row.monthMs,
+      totalMs: acc.totalMs + row.totalMs,
+    }), {
+      todayMs: 0,
+      weekMs: 0,
+      monthMs: 0,
+      totalMs: 0,
+    })
+
+    return {
+      ...totals,
+      siteRows,
+      topSites: [...siteRows].sort((a, b) => b.weekMs - a.weekMs).slice(0, 6),
+      chartPoints,
+    }
+  }, [dailyStats, orderedSites])
+
+  const load = async (options?: { silentError?: boolean }) => {
+    if (loadInFlightRef.current) {
+      return
+    }
+
+    loadInFlightRef.current = true
     try {
       const data = await sendRuntimeMessage<StorageState>({ type: 'GET_OPTIONS_DATA' })
       setSettings(data.settings)
       setSiteConfigs(data.siteConfigs)
       setDailyStats(data.dailyStats)
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      setStatus(`Failed to load settings: ${message}`)
+      if (!options?.silentError) {
+        const message = error instanceof Error ? error.message : 'Unknown error'
+        setStatus(`Failed to load settings: ${message}`)
+      }
+    } finally {
+      loadInFlightRef.current = false
     }
   }
 
   useEffect(() => {
     void load()
+
+    const refreshInterval = window.setInterval(() => {
+      void load({ silentError: true })
+    }, 1000)
+
+    return () => {
+      window.clearInterval(refreshInterval)
+    }
   }, [])
 
   const onInput = (key: keyof FormState, value: string | boolean) => {
@@ -231,6 +388,58 @@ export default function App() {
         </div>
       </section>
 
+      <section className="card" style={{ marginBottom: 14 }}>
+        <h2>Activity</h2>
+        <div className="activityStats">
+          <article className="activityStat">
+            <span>Today</span>
+            <strong>{formatDurationMs(activity.todayMs)}</strong>
+          </article>
+          <article className="activityStat">
+            <span>This week</span>
+            <strong>{formatDurationMs(activity.weekMs)}</strong>
+          </article>
+          <article className="activityStat">
+            <span>This month</span>
+            <strong>{formatDurationMs(activity.monthMs)}</strong>
+          </article>
+          <article className="activityStat">
+            <span>Total screen time</span>
+            <strong>{formatDurationMs(activity.totalMs)}</strong>
+          </article>
+        </div>
+
+        {activity.chartPoints.length > 0 ? (
+          <>
+            <p className="footerNote" style={{ marginTop: 12 }}>Last 30 days usage trend</p>
+            <ActivityBarChart data={activity.chartPoints} />
+
+            {activity.topSites.length > 0 && (
+              <div className="activityTopSites">
+                <h3>Top sites this week</h3>
+                <div className="activityTopSiteList">
+                  {activity.topSites.map((site) => (
+                    <article key={site.domain} className="activityTopSiteItem">
+                      <div>
+                        <strong>{site.domain}</strong>
+                        <p>{site.todayOpens} opens today</p>
+                      </div>
+                      <div className="activityTopSiteMetrics">
+                        <span>Today: {formatDurationMs(site.todayMs)}</span>
+                        <span>7d: {formatDurationMs(site.weekMs)}</span>
+                        <span>Total: {formatDurationMs(site.totalMs)}</span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="footerNote">No activity tracked yet.</p>
+        )}
+      </section>
+
       <div className="grid">
         <section className="card">
           <h2>Add / Update a site</h2>
@@ -357,7 +566,7 @@ export default function App() {
                         <div>mode: {site.bonusMode === 'strict' ? 'strict' : 'im a bitch'}</div>
                       </td>
                       <td>
-                        <div>{Math.floor(stat.usedMs / 60000)} min used</div>
+                        <div>{formatDurationMs(stat.usedMs)} used</div>
                         <div>{stat.openCount} opens</div>
                       </td>
                       <td>

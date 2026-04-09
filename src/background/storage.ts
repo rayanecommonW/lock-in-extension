@@ -48,8 +48,60 @@ function asSiteConfigs(value: unknown): Record<string, SiteConfig> {
   return normalizedConfigs
 }
 
+function normalizeMsCounter(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? Math.floor(value)
+    : 0
+}
+
+function normalizeHistoryByDate(value: unknown): Record<string, { usedMs: number; openCount: number; bonusMs: number }> {
+  if (!isObject(value)) {
+    return {}
+  }
+
+  const rawHistory = value as Record<string, unknown>
+  const normalizedHistory: Record<string, { usedMs: number; openCount: number; bonusMs: number }> = {}
+
+  for (const dateKey of Object.keys(rawHistory)) {
+    const rawEntry = rawHistory[dateKey]
+    if (!isObject(rawEntry)) {
+      continue
+    }
+
+    normalizedHistory[dateKey] = {
+      usedMs: normalizeMsCounter(rawEntry.usedMs),
+      openCount: normalizeMsCounter(rawEntry.openCount),
+      bonusMs: normalizeMsCounter(rawEntry.bonusMs),
+    }
+  }
+
+  return normalizedHistory
+}
+
 function asDailyStats(value: unknown): Record<string, DailyStat> {
-  return isObject(value) ? (value as Record<string, DailyStat>) : {}
+  if (!isObject(value)) {
+    return {}
+  }
+
+  const rawStats = value as Record<string, unknown>
+  const normalizedStats: Record<string, DailyStat> = {}
+
+  for (const domain of Object.keys(rawStats)) {
+    const rawStat = rawStats[domain]
+    if (!isObject(rawStat)) {
+      continue
+    }
+
+    normalizedStats[domain] = {
+      dateKey: typeof rawStat.dateKey === 'string' ? rawStat.dateKey : '',
+      usedMs: normalizeMsCounter(rawStat.usedMs),
+      openCount: normalizeMsCounter(rawStat.openCount),
+      bonusMs: normalizeMsCounter(rawStat.bonusMs),
+      historyByDate: normalizeHistoryByDate(rawStat.historyByDate),
+    }
+  }
+
+  return normalizedStats
 }
 
 function asSessions(value: unknown): Record<string, DomainSession> {

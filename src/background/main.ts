@@ -2,6 +2,7 @@ import { mutateState, ensureStorageInitialized } from '@/background/storage'
 import type {
   AccessDecision,
   BlockReason,
+  DashboardData,
   DailyStat,
   DomainSession,
   ExtensionRequest,
@@ -19,6 +20,8 @@ import {
 
 const CLEANUP_ALARM = 'lock-in-cleanup'
 const ONE_MINUTE = 1
+const ONE_DAY_MS = 24 * 60 * 60 * 1000
+const HISTORY_RETENTION_DAYS = 35
 const BONUS_FIVE_MINUTES_MS = 5 * 60_000
 const HEARTBEAT_TICK_MS = 1000
 const BONUS_DEBOUNCE_MS = 1000
@@ -29,6 +32,45 @@ function createEmptyDailyStat(dateKey: string): DailyStat {
     usedMs: 0,
     openCount: 0,
     bonusMs: 0,
+    historyByDate: {},
+  }
+}
+
+function pruneHistoryByDate(
+  historyByDate: Record<string, { usedMs: number; openCount: number; bonusMs: number }>,
+  referenceDateKey: string,
+): Record<string, { usedMs: number; openCount: number; bonusMs: number }> {
+  const cutoffDate = new Date()
+  cutoffDate.setTime(cutoffDate.getTime() - (HISTORY_RETENTION_DAYS - 1) * ONE_DAY_MS)
+  const cutoffDateKey = toLocalDateKey(cutoffDate)
+
+  const pruned: Record<string, { usedMs: number; openCount: number; bonusMs: number }> = {}
+  for (const dateKey of Object.keys(historyByDate)) {
+    if (dateKey >= cutoffDateKey && dateKey <= referenceDateKey) {
+      pruned[dateKey] = historyByDate[dateKey]
+    }
+  }
+
+  return pruned
+}
+
+function rollStatIntoHistory(stat: DailyStat, nextDateKey: string): DailyStat {
+  const currentHistory = stat.historyByDate ?? {}
+  const nextHistory = {
+    ...currentHistory,
+    [stat.dateKey]: {
+      usedMs: stat.usedMs,
+      openCount: stat.openCount,
+      bonusMs: stat.bonusMs,
+    },
+  }
+
+  return {
+    dateKey: nextDateKey,
+    usedMs: 0,
+    openCount: 0,
+    bonusMs: 0,
+    historyByDate: pruneHistoryByDate(nextHistory, nextDateKey),
   }
 }
 
@@ -48,19 +90,25 @@ function createSession(domain: string, nowMs: number, reflectCompleted: boolean)
 
 function ensureDailyStat(state: StorageState, domain: string, dateKey: string): DailyStat {
   const current = state.dailyStats[domain]
-  if (!current || current.dateKey !== dateKey) {
+  if (!current) {
     const reset = createEmptyDailyStat(dateKey)
     state.dailyStats[domain] = reset
     return reset
   }
+
+  if (current.dateKey !== dateKey) {
+    const rolled = rollStatIntoHistory(current, dateKey)
+    state.dailyStats[domain] = rolled
+    return rolled
+  }
+
+  current.historyByDate = pruneHistoryByDate(current.historyByDate ?? {}, dateKey)
   return current
 }
 
 function runDailyReset(state: StorageState, dateKey: string): void {
   for (const domain of Object.keys(state.dailyStats)) {
-    if (state.dailyStats[domain].dateKey !== dateKey) {
-      state.dailyStats[domain] = createEmptyDailyStat(dateKey)
-    }
+    ensureDailyStat(state, domain, dateKey)
   }
 }
 
@@ -467,28 +515,18 @@ async function handleUpdateSettings(request: ExtensionRequest): Promise<{ succes
   })
 }
 
-function formatDuration(ms: number | null): string {
-  if (ms === null) {
-    return 'unlimited'
-  }
-
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000))
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`
-  }
-  if (minutes > 0) {
-    return `${minutes}m ${seconds}s`
-  }
-  return `${seconds}s`
-}
-
-async function handleGetDashboardData(request: ExtensionRequest): Promise<Record<string, unknown>> {
+async function handleGetDashboardData(request: ExtensionRequest): Promise<DashboardData> {
   if (request.type !== 'GET_DASHBOARD_DATA') {
-    return {}
+    return {
+      settings: {
+        extensionEnabled: true,
+      },
+      totalSites: 0,
+      activeDomain: null,
+      activeHasRule: false,
+      activeSummary: null,
+      summaries: [],
+    }
   }
 
   return mutateState(async (state) => {
@@ -507,15 +545,17 @@ async function handleGetDashboardData(request: ExtensionRequest): Promise<Record
       return {
         domain,
         enabled: config.enabled,
-        usedToday: formatDuration(stat.usedMs),
+        usedTodayMs: stat.usedMs,
         opensToday: stat.openCount,
-        dailyRemaining: formatDuration(dailyLimitMs === null ? null : Math.max(0, dailyLimitMs + stat.bonusMs - stat.usedMs)),
-        sessionUsed: formatDuration(session?.usedMs ?? 0),
-        sessionRemaining: formatDuration(sessionLimitMs === null ? null : Math.max(0, sessionLimitMs + (session?.bonusMs ?? 0) - (session?.usedMs ?? 0))),
+        dailyRemainingMs: dailyLimitMs === null ? null : Math.max(0, dailyLimitMs + stat.bonusMs - stat.usedMs),
+        sessionUsedMs: session?.usedMs ?? 0,
+        sessionRemainingMs: sessionLimitMs === null
+          ? null
+          : Math.max(0, sessionLimitMs + (session?.bonusMs ?? 0) - (session?.usedMs ?? 0)),
       }
     })
 
-    let activeSummary: Record<string, unknown> | null = null
+    let activeSummary: DashboardData['activeSummary'] = null
     let activeDomain: string | null = null
     let activeHasRule = false
 

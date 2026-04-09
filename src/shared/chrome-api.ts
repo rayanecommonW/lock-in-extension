@@ -15,14 +15,31 @@ export function sendRuntimeMessage<T>(payload: ExtensionRequest): Promise<T> {
 
 export function queryActiveTab(): Promise<chrome.tabs.Tab | null> {
   return new Promise((resolve, reject) => {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const tryCurrentWindow = () => {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        const lastError = chrome.runtime.lastError
+        if (lastError) {
+          reject(new Error(lastError.message))
+          return
+        }
+
+        resolve(tabs[0] ?? null)
+      })
+    }
+
+    chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
       const lastError = chrome.runtime.lastError
       if (lastError) {
-        reject(new Error(lastError.message))
+        tryCurrentWindow()
         return
       }
 
-      resolve(tabs[0] ?? null)
+      if (tabs.length > 0) {
+        resolve(tabs[0] ?? null)
+        return
+      }
+
+      tryCurrentWindow()
     })
   })
 }

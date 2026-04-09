@@ -164,8 +164,144 @@ button {
   font-size: 0.86rem;
 }
 
+.activityStats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.activityStat {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  background: #fffdf8;
+}
+
+.activityStat span {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.activityStat strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 1.1rem;
+}
+
+.activityChartWrap {
+  position: relative;
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 8px;
+  background: #fffdf8;
+}
+
+.activityChart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.activityGridLine {
+  stroke: rgba(58, 44, 31, 0.12);
+  stroke-width: 1;
+}
+
+.activityAxisLabel,
+.activityDateLabel {
+  fill: var(--muted);
+  font-size: 10px;
+}
+
+.activityBar {
+  fill: #bb4f41;
+  opacity: 0.82;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  transform-origin: center bottom;
+}
+
+.activityBar.isEmpty {
+  opacity: 0.28;
+}
+
+.activityBar.isHovered {
+  opacity: 1;
+  transform: scaleY(1.04);
+}
+
+.activityTooltip {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #2f5e6d;
+  color: #f7f2ec;
+  font-size: 0.78rem;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+}
+
+.activityTopSites {
+  margin-top: 14px;
+}
+
+.activityTopSites h3 {
+  margin: 0 0 8px;
+  font-size: 0.98rem;
+}
+
+.activityTopSiteList {
+  display: grid;
+  gap: 8px;
+}
+
+.activityTopSiteItem {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 9px 10px;
+  background: #fffdf8;
+}
+
+.activityTopSiteItem p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.activityTopSiteMetrics {
+  display: grid;
+  gap: 2px;
+  text-align: right;
+  font-size: 0.8rem;
+  color: #53463c;
+}
+
+.activityTable td,
+.activityTable th {
+  white-space: nowrap;
+}
+
 @media (max-width: 860px) {
   .grid {
     grid-template-columns: 1fr;
+  }
+
+  .activityStats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .activityTopSiteItem {
+    flex-direction: column;
+  }
+
+  .activityTopSiteMetrics {
+    text-align: left;
   }
 }

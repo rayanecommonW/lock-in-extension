@@ -1,69 +1,49 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { openOptionsPage, queryActiveTab, sendRuntimeMessage } from '@/shared/chrome-api'
-
-type DashboardPayload = {
-  settings: {
-    extensionEnabled: boolean
-  }
-  totalSites: number
-  activeDomain: string | null
-  activeHasRule: boolean
-  activeSummary: {
-    domain: string
-    usedToday: string
-    dailyRemaining: string
-    opensToday: number
-  } | null
-}
+import { useEffect, useMemo, useState } from 'react'
+import { openOptionsPage, sendRuntimeMessage } from '@/shared/chrome-api'
+import { useDashboardStore } from '@/shared/dashboard-store'
 
 export default function App() {
-  const [data, setData] = useState<DashboardPayload | null>(null)
   const [busy, setBusy] = useState(false)
   const [addingRule, setAddingRule] = useState(false)
   const [quickDailyMinutes, setQuickDailyMinutes] = useState('30')
   const [quickPauseMinutes, setQuickPauseMinutes] = useState('')
   const [quickOpenLimitPerDay, setQuickOpenLimitPerDay] = useState('')
-  const [status, setStatus] = useState('')
-  const loadInFlightRef = useRef(false)
-
-  const load = useCallback(async (options?: { silentError?: boolean; keepStatus?: boolean }) => {
-    if (loadInFlightRef.current) {
-      return
-    }
-
-    loadInFlightRef.current = true
-    try {
-      const activeTab = await queryActiveTab()
-      const payload = await sendRuntimeMessage<DashboardPayload>({
-        type: 'GET_DASHBOARD_DATA',
-        activeUrl: activeTab?.url,
-      })
-      setData(payload)
-
-      if (!options?.keepStatus) {
-        setStatus('')
-      }
-    } catch (error) {
-      if (!options?.silentError) {
-        const message = error instanceof Error ? error.message : 'Unknown error'
-        setStatus(`Failed to load popup data: ${message}`)
-      }
-    } finally {
-      loadInFlightRef.current = false
-    }
-  }, [])
+  const data = useDashboardStore((state) => state.data)
+  const status = useDashboardStore((state) => state.status)
+  const refresh = useDashboardStore((state) => state.refresh)
+  const initAutoSync = useDashboardStore((state) => state.initAutoSync)
+  const stopAutoSync = useDashboardStore((state) => state.stopAutoSync)
+  const setStatus = useDashboardStore((state) => state.setStatus)
+  const getDisplayedUsedToday = useDashboardStore((state) => state.getDisplayedUsedToday)
+  const getDisplayedDailyRemaining = useDashboardStore((state) => state.getDisplayedDailyRemaining)
+  const liveNowMs = useDashboardStore((state) => state.liveNowMs)
 
   useEffect(() => {
-    void load()
+    void refresh()
+    initAutoSync()
 
-    const refreshInterval = window.setInterval(() => {
-      void load({ silentError: true, keepStatus: true })
-    }, 1000)
+    const onFocus = () => {
+      void refresh({ silentError: true, keepStatus: true })
+    }
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void refresh({ silentError: true, keepStatus: true })
+      }
+    }
+
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibilityChange)
 
     return () => {
-      window.clearInterval(refreshInterval)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      stopAutoSync()
     }
-  }, [load])
+  }, [initAutoSync, refresh, stopAutoSync])
+
+  const displayedUsedToday = useMemo(() => getDisplayedUsedToday(), [data, liveNowMs, getDisplayedUsedToday])
+  const displayedDailyRemaining = useMemo(() => getDisplayedDailyRemaining(), [data, liveNowMs, getDisplayedDailyRemaining])
 
   const toggleEnabled = async () => {
     if (!data || busy) {
@@ -81,7 +61,7 @@ export default function App() {
         return
       }
 
-      await load()
+      await refresh()
       setStatus('')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -138,7 +118,7 @@ export default function App() {
         return
       }
 
-      await load()
+      await refresh()
       setStatus(`Added ${domain} with ${parsedMinutes} min/day.`)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -182,8 +162,8 @@ export default function App() {
         {data?.activeSummary ? (
           <div className="activeSite">
             <h2>{data.activeSummary.domain}</h2>
-            <p>Used today: {data.activeSummary.usedToday}</p>
-            <p>Remaining today: {data.activeSummary.dailyRemaining}</p>
+            <p>Used today: {displayedUsedToday}</p>
+            <p>Remaining today: {displayedDailyRemaining}</p>
             <p>Opens today: {data.activeSummary.opensToday}</p>
           </div>
         ) : data?.activeDomain ? (
