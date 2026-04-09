@@ -82,6 +82,10 @@ export interface AddFiveMinutesRequest {
   domain: string
 }
 
+export interface CloseTabRequest {
+  type: 'CLOSE_TAB'
+}
+
 export interface GetOptionsDataRequest {
   type: 'GET_OPTIONS_DATA'
 }
@@ -111,6 +115,7 @@ export type ExtensionRequest =
   | CompleteReflectRequest
   | HeartbeatRequest
   | AddFiveMinutesRequest
+  | CloseTabRequest
   | GetOptionsDataRequest
   | UpsertSiteRequest
   | DeleteSiteRequest

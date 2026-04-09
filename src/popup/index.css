@@ -88,6 +88,55 @@ body {
   color: #f8f5f1;
 }
 
+.btnPrimary:disabled,
+.btnGhost:disabled,
+.btnSmall:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.quickAddBox {
+  display: grid;
+  gap: 8px;
+  text-align: left;
+}
+
+.quickFields {
+  display: grid;
+  gap: 5px;
+}
+
+.quickLabel {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.quickInput {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #fff;
+  color: var(--ink);
+}
+
+.btnSmall {
+  width: fit-content;
+  border: 0;
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btnQuickAdd {
+  width: 100%;
+}
+
 .activeSite h2 {
   margin: 0 0 6px;
   font-size: 1rem;

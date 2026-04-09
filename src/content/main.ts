@@ -45,7 +45,7 @@ function reasonLabel(reason?: BlockReason): string {
     case 'daily_limit':
       return 'Max limit per day reached.'
     case 'session_limit':
-      return 'Session time limit reached.'
+      return 'Time for a pause.'
     case 'open_limit':
       return 'Open limit per day reached.'
     default:
@@ -53,75 +53,165 @@ function reasonLabel(reason?: BlockReason): string {
   }
 }
 
+function pausePlayingMedia(): void {
+  const mediaElements = document.querySelectorAll<HTMLMediaElement>('video, audio')
+  for (const mediaElement of mediaElements) {
+    try {
+      if (!mediaElement.paused) {
+        mediaElement.pause()
+      }
+    } catch {
+      // Ignore media APIs that cannot be paused from the current context.
+    }
+  }
+}
+
 function renderModalSkeleton(title: string, message: string): { root: ShadowRoot; content: HTMLElement } {
   const root = getOrCreateOverlayContainer()
   root.innerHTML = `
     <style>
-      :host { all: initial; }
+      :host {
+        all: initial;
+        color-scheme: light;
+        font-family: 'Segoe UI Variable Text', 'Avenir Next', 'Inter', 'Helvetica Neue', 'Segoe UI', sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
       .wrap {
         pointer-events: auto;
         position: fixed;
         inset: 0;
         display: grid;
         place-items: center;
-        background: radial-gradient(circle at top left, rgba(36, 16, 22, 0.92), rgba(9, 11, 15, 0.95));
-        backdrop-filter: blur(7px);
+        padding: 18px;
+        background:
+          radial-gradient(circle at 12% 8%, rgba(112, 180, 232, 0.20), transparent 40%),
+          radial-gradient(circle at 88% 92%, rgba(255, 173, 96, 0.16), transparent 44%),
+          linear-gradient(145deg, rgba(6, 12, 20, 0.82), rgba(14, 17, 24, 0.90));
+        backdrop-filter: blur(8px) saturate(1.2);
       }
       .card {
+        position: relative;
+        overflow: hidden;
         width: min(92vw, 520px);
-        border-radius: 22px;
-        padding: 26px;
-        box-sizing: border-box;
-        background: linear-gradient(145deg, #f9efe6 0%, #efe7dc 100%);
-        color: #1b1513;
-        border: 2px solid #2d1f1a;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
-        font-family: 'Trebuchet MS', 'Gill Sans', 'Segoe UI', sans-serif;
+        border-radius: 24px;
+        padding: 26px 24px 20px;
+        background: linear-gradient(160deg, #f9fcff 0%, #eff4fb 100%);
+        color: #152031;
+        border: 1px solid rgba(18, 35, 56, 0.16);
+        box-shadow:
+          0 24px 56px rgba(5, 9, 16, 0.45),
+          0 2px 0 rgba(255, 255, 255, 0.65) inset;
+        animation: card-in 220ms cubic-bezier(0.2, 0.9, 0.2, 1);
+      }
+      .card::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        height: 5px;
+        background: linear-gradient(90deg, #3f9ddf 0%, #48c3a0 50%, #f1a65f 100%);
+      }
+      .eyebrow {
+        margin: 0 0 10px;
+        font-size: 0.72rem;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: #3f638b;
       }
       h1 {
-        margin: 0 0 8px;
-        font-size: 1.5rem;
+        margin: 0 0 10px;
+        font-size: clamp(1.34rem, 2.3vw, 1.62rem);
+        line-height: 1.2;
+        letter-spacing: -0.015em;
+        font-weight: 760;
       }
-      p {
+      .body {
         margin: 0;
         font-size: 1rem;
-        line-height: 1.45;
+        line-height: 1.55;
+        color: #25374f;
       }
       .muted {
-        margin-top: 10px;
-        color: #4e4039;
-        font-size: 0.95rem;
+        margin-top: 14px;
+        color: #33506f;
+        font-size: 0.92rem;
+        line-height: 1.4;
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: rgba(66, 118, 167, 0.10);
+        border: 1px solid rgba(66, 118, 167, 0.18);
       }
       .row {
-        margin-top: 18px;
+        margin-top: 16px;
         display: flex;
-        gap: 10px;
+        flex-wrap: wrap;
+        gap: 9px;
       }
       button {
-        border: 0;
-        border-radius: 10px;
+        border: 1px solid transparent;
+        border-radius: 12px;
         padding: 10px 14px;
         font-weight: 700;
+        font-size: 0.92rem;
+        letter-spacing: 0.01em;
         cursor: pointer;
+        transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+      }
+      button:hover {
+        transform: translateY(-1px);
+      }
+      button:active {
+        transform: translateY(0);
+      }
+      button:disabled {
+        opacity: 0.65;
+        cursor: not-allowed;
+        transform: none;
       }
       .primary {
-        background: #8d2f2a;
+        background: linear-gradient(145deg, #2d86d0, #2f6fd6);
         color: #fff;
+        box-shadow: 0 10px 24px rgba(31, 90, 170, 0.35);
       }
       .secondary {
-        background: #2d1f1a;
-        color: #f6efe8;
+        background: linear-gradient(145deg, #17345a, #1e4678);
+        color: #f2f7ff;
+        box-shadow: 0 8px 18px rgba(10, 20, 36, 0.32);
       }
       .ghost {
-        background: transparent;
-        border: 1px solid #3a2b24;
-        color: #3a2b24;
+        background: rgba(255, 255, 255, 0.66);
+        border-color: rgba(23, 52, 90, 0.24);
+        color: #17345a;
+      }
+      @media (max-width: 460px) {
+        .card {
+          padding: 24px 18px 18px;
+        }
+        button {
+          flex: 1;
+          min-width: 120px;
+        }
+      }
+      @keyframes card-in {
+        from {
+          opacity: 0;
+          transform: translateY(8px) scale(0.985);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
       }
     </style>
     <div class="wrap">
       <section class="card">
+        <p class="eyebrow">Lock In</p>
         <h1>${title}</h1>
-        <p>${message}</p>
+        <p class="body">${message}</p>
         <div class="muted" id="lock-in-note"></div>
         <div class="row" id="lock-in-actions"></div>
       </section>
@@ -144,9 +234,15 @@ async function showReflectModal(decision: AccessDecision): Promise<void> {
     return
   }
 
+  const isSessionPause = decision.reason === 'session_limit'
+  if (isSessionPause) {
+    pausePlayingMedia()
+  }
+
   const delaySeconds = Math.max(0, Math.floor(decision.reflectDelaySeconds ?? 0))
   const message = decision.reflectMessage ?? 'Are you sure you want to spend time on this site?'
-  const { root } = renderModalSkeleton('Reflect before browsing', message)
+  const title = isSessionPause ? 'Time for a pause' : 'Reflect before browsing'
+  const { root } = renderModalSkeleton(title, message)
   const note = root.getElementById('lock-in-note') as HTMLElement
 
   let remaining = delaySeconds
@@ -221,18 +317,19 @@ async function showBlockModal(decision: AccessDecision): Promise<void> {
   const leaveButton = document.createElement('button')
   leaveButton.className = decision.canAddFive ? 'secondary' : 'primary'
   leaveButton.textContent = 'Leave'
-  leaveButton.onclick = () => {
-    window.location.href = 'about:blank'
+  leaveButton.onclick = async () => {
+    leaveButton.disabled = true
+
+    const result = await sendMessage<{ success: boolean }>({
+      type: 'CLOSE_TAB',
+    })
+
+    if (!result.success) {
+      // Fallback for rare cases where tab close is unavailable.
+      window.location.href = 'about:blank'
+    }
   }
   content.appendChild(leaveButton)
-
-  const closeButton = document.createElement('button')
-  closeButton.className = 'ghost'
-  closeButton.textContent = 'Keep page blocked'
-  closeButton.onclick = () => {
-    // Keep block overlay visible; no-op action.
-  }
-  content.appendChild(closeButton)
 }
 
 async function applyDecision(decision: AccessDecision): Promise<void> {

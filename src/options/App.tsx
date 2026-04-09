@@ -257,7 +257,7 @@ export default function App() {
                 />
               </label>
               <label>
-                Session time limit (min)
+                Take a pause every (min)
                 <input
                   type="number"
                   min={0}
@@ -352,7 +352,7 @@ export default function App() {
                       </td>
                       <td>
                         <div>daily: {minsLabel(site.dailyLimitMinutes)}</div>
-                        <div>session: {minsLabel(site.sessionLimitMinutes)}</div>
+                        <div>pause every: {minsLabel(site.sessionLimitMinutes)}</div>
                         <div>opens/day: {site.openLimitPerDay ?? 'off'}</div>
                         <div>mode: {site.bonusMode === 'strict' ? 'strict' : 'im a bitch'}</div>
                       </td>
@@ -374,7 +374,7 @@ export default function App() {
           )}
 
           <p className="footerNote">
-            Session reset: all tabs for a site closed OR away from the site more than the inactivity threshold.
+            Pause cycle reset: all tabs for a site closed OR away from the site more than the inactivity threshold.
           </p>
         </section>
       </div>

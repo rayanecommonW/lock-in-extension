@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { openOptionsPage, queryActiveTab, sendRuntimeMessage } from '@/shared/chrome-api'
 
 type DashboardPayload = {
@@ -6,6 +6,8 @@ type DashboardPayload = {
     extensionEnabled: boolean
   }
   totalSites: number
+  activeDomain: string | null
+  activeHasRule: boolean
   activeSummary: {
     domain: string
     usedToday: string
@@ -17,9 +19,19 @@ type DashboardPayload = {
 export default function App() {
   const [data, setData] = useState<DashboardPayload | null>(null)
   const [busy, setBusy] = useState(false)
+  const [addingRule, setAddingRule] = useState(false)
+  const [quickDailyMinutes, setQuickDailyMinutes] = useState('30')
+  const [quickPauseMinutes, setQuickPauseMinutes] = useState('')
+  const [quickOpenLimitPerDay, setQuickOpenLimitPerDay] = useState('')
   const [status, setStatus] = useState('')
+  const loadInFlightRef = useRef(false)
 
-  const load = async () => {
+  const load = useCallback(async (options?: { silentError?: boolean; keepStatus?: boolean }) => {
+    if (loadInFlightRef.current) {
+      return
+    }
+
+    loadInFlightRef.current = true
     try {
       const activeTab = await queryActiveTab()
       const payload = await sendRuntimeMessage<DashboardPayload>({
@@ -27,16 +39,31 @@ export default function App() {
         activeUrl: activeTab?.url,
       })
       setData(payload)
-      setStatus('')
+
+      if (!options?.keepStatus) {
+        setStatus('')
+      }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      setStatus(`Failed to load popup data: ${message}`)
+      if (!options?.silentError) {
+        const message = error instanceof Error ? error.message : 'Unknown error'
+        setStatus(`Failed to load popup data: ${message}`)
+      }
+    } finally {
+      loadInFlightRef.current = false
     }
-  }
+  }, [])
 
   useEffect(() => {
     void load()
-  }, [])
+
+    const refreshInterval = window.setInterval(() => {
+      void load({ silentError: true, keepStatus: true })
+    }, 1000)
+
+    return () => {
+      window.clearInterval(refreshInterval)
+    }
+  }, [load])
 
   const toggleEnabled = async () => {
     if (!data || busy) {
@@ -64,6 +91,63 @@ export default function App() {
     }
   }
 
+  const addCurrentSiteRule = async () => {
+    if (!data?.activeDomain || data.activeHasRule || addingRule) {
+      return
+    }
+
+    const parsedMinutes = Number.parseInt(quickDailyMinutes, 10)
+    if (!Number.isFinite(parsedMinutes) || parsedMinutes < 1) {
+      setStatus('Please enter a valid daily limit (at least 1 minute).')
+      return
+    }
+
+    const pauseEveryRaw = quickPauseMinutes.trim()
+    const pauseEveryParsed = pauseEveryRaw ? Number.parseInt(pauseEveryRaw, 10) : null
+    if (pauseEveryRaw && (!Number.isFinite(pauseEveryParsed) || pauseEveryParsed === null || pauseEveryParsed < 1)) {
+      setStatus('Take a pause every must be at least 1 minute or left empty.')
+      return
+    }
+
+    const openLimitRaw = quickOpenLimitPerDay.trim()
+    const openLimitParsed = openLimitRaw ? Number.parseInt(openLimitRaw, 10) : null
+    if (openLimitRaw && (!Number.isFinite(openLimitParsed) || openLimitParsed === null || openLimitParsed < 1)) {
+      setStatus('Open limit per day must be at least 1 or left empty.')
+      return
+    }
+
+    const domain = data.activeDomain
+    setAddingRule(true)
+    try {
+      const result = await sendRuntimeMessage<{ success: boolean; error?: string }>({
+        type: 'UPSERT_SITE',
+        config: {
+          domain,
+          enabled: true,
+          dailyLimitMinutes: parsedMinutes,
+          sessionLimitMinutes: pauseEveryParsed,
+          openLimitPerDay: openLimitParsed,
+          reflectDelaySeconds: 10,
+          reflectMessage: 'Are you sure you want to spend time on this site?',
+          bonusMode: 'strict',
+        },
+      })
+
+      if (!result.success) {
+        setStatus(`Failed to add rule: ${result.error ?? 'unknown error'}`)
+        return
+      }
+
+      await load()
+      setStatus(`Added ${domain} with ${parsedMinutes} min/day.`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      setStatus(`Failed to add rule: ${message}`)
+    } finally {
+      setAddingRule(false)
+    }
+  }
+
   const openSettings = () => {
     void openOptionsPage().catch((error) => {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -85,7 +169,7 @@ export default function App() {
             {data?.settings.extensionEnabled ? 'ON' : 'OFF'}
           </span>
         </div>
-        <button className="btnPrimary" disabled={busy || !data} onClick={() => void toggleEnabled()}>
+        <button className="btnPrimary" disabled={busy || !data || addingRule} onClick={() => void toggleEnabled()}>
           {data?.settings.extensionEnabled ? 'Disable extension' : 'Enable extension'}
         </button>
       </section>
@@ -102,8 +186,60 @@ export default function App() {
             <p>Remaining today: {data.activeSummary.dailyRemaining}</p>
             <p>Opens today: {data.activeSummary.opensToday}</p>
           </div>
+        ) : data?.activeDomain ? (
+          data.activeHasRule ? (
+            <p className="muted">Current tab already has a rule.</p>
+          ) : (
+            <div className="quickAddBox">
+              <p className="muted">Current tab is not tracked yet: {data.activeDomain}</p>
+              <div className="quickFields">
+                <label className="quickLabel" htmlFor="quick-daily-limit">Daily limit (min)</label>
+                <input
+                  id="quick-daily-limit"
+                  className="quickInput"
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={quickDailyMinutes}
+                  onChange={(event) => setQuickDailyMinutes(event.target.value)}
+                />
+
+                <label className="quickLabel" htmlFor="quick-pause-limit">Take a pause every (min)</label>
+                <input
+                  id="quick-pause-limit"
+                  className="quickInput"
+                  type="number"
+                  min={1}
+                  step={1}
+                  placeholder="optional"
+                  value={quickPauseMinutes}
+                  onChange={(event) => setQuickPauseMinutes(event.target.value)}
+                />
+
+                <label className="quickLabel" htmlFor="quick-open-limit">Open limit / day</label>
+                <input
+                  id="quick-open-limit"
+                  className="quickInput"
+                  type="number"
+                  min={1}
+                  step={1}
+                  placeholder="optional"
+                  value={quickOpenLimitPerDay}
+                  onChange={(event) => setQuickOpenLimitPerDay(event.target.value)}
+                />
+              </div>
+
+              <button
+                className="btnSmall btnQuickAdd"
+                disabled={addingRule || busy}
+                onClick={() => void addCurrentSiteRule()}
+              >
+                {addingRule ? 'Adding...' : 'Add this site'}
+              </button>
+            </div>
+          )
         ) : (
-          <p className="muted">Current tab is not tracked.</p>
+          <p className="muted">Current tab is not trackable.</p>
         )}
       </section>
 

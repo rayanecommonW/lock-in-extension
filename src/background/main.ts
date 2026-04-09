@@ -80,6 +80,45 @@ function includeTab(session: DomainSession, tabId: number): void {
   }
 }
 
+function isSessionPauseDue(config: SiteConfig, session: DomainSession): boolean {
+  const sessionLimitMs = minutesToMs(config.sessionLimitMinutes)
+  if (sessionLimitMs === null) {
+    return false
+  }
+
+  return session.usedMs >= sessionLimitMs + session.bonusMs
+}
+
+function activateSessionPause(session: DomainSession, nowMs: number): void {
+  session.reflectCompleted = false
+  session.usedMs = 0
+  session.bonusMs = 0
+  session.startedAt = nowMs
+  session.lastActivityAt = nowMs
+}
+
+function createSessionPauseDecision(config: SiteConfig, domain: string, daily: DailyStat, session: DomainSession): AccessDecision {
+  const dailyLimitMs = minutesToMs(config.dailyLimitMinutes)
+  const sessionLimitMs = minutesToMs(config.sessionLimitMinutes)
+  const openLimit = config.openLimitPerDay
+
+  return {
+    action: 'reflect',
+    matchedDomain: domain,
+    reason: 'session_limit',
+    reflectDelaySeconds: config.reflectDelaySeconds,
+    reflectMessage: 'Take a short pause before continuing.',
+    remainingDailyMs: dailyLimitMs === null
+      ? null
+      : Math.max(0, dailyLimitMs + daily.bonusMs - daily.usedMs),
+    remainingSessionMs: sessionLimitMs === null
+      ? null
+      : Math.max(0, sessionLimitMs + session.bonusMs - session.usedMs),
+    openCount: daily.openCount,
+    openLimit,
+  }
+}
+
 function getTimeBlockReason(config: SiteConfig, daily: DailyStat, session: DomainSession): BlockReason | null {
   const dailyLimitMs = minutesToMs(config.dailyLimitMinutes)
   if (dailyLimitMs !== null && daily.usedMs >= dailyLimitMs + daily.bonusMs) {
@@ -107,19 +146,18 @@ function toDecision(config: SiteConfig, domain: string, daily: DailyStat, sessio
     }
   }
 
-  const timeReason = getTimeBlockReason(config, daily, session)
-  if (timeReason) {
+  const dailyLimitMs = minutesToMs(config.dailyLimitMinutes)
+  if (dailyLimitMs !== null && daily.usedMs >= dailyLimitMs + daily.bonusMs) {
     return {
       action: 'block',
       matchedDomain: domain,
-      reason: timeReason,
+      reason: 'daily_limit',
       canAddFive: config.bonusMode === 'bitch_mode',
       openCount: daily.openCount,
       openLimit,
     }
   }
 
-  const dailyLimitMs = minutesToMs(config.dailyLimitMinutes)
   const sessionLimitMs = minutesToMs(config.sessionLimitMinutes)
 
   const remainingDailyMs = dailyLimitMs === null
@@ -232,6 +270,11 @@ async function handleCheckAccess(request: ExtensionRequest, tabId: number): Prom
       daily.openCount += 1
     }
 
+    if (session.reflectCompleted && isSessionPauseDue(site.config, session)) {
+      activateSessionPause(session, now)
+      return createSessionPauseDecision(site.config, site.domain, daily, session)
+    }
+
     return toDecision(site.config, site.domain, daily, session)
   })
 }
@@ -291,11 +334,21 @@ async function handleHeartbeat(request: ExtensionRequest, tabId: number): Promis
       return toDecision(site.config, site.domain, daily, session)
     }
 
+    if (request.active && session.reflectCompleted && isSessionPauseDue(site.config, session)) {
+      activateSessionPause(session, now)
+      return createSessionPauseDecision(site.config, site.domain, daily, session)
+    }
+
     if (request.active) {
       session.lastActivityAt = now
       if (session.reflectCompleted) {
         session.usedMs += HEARTBEAT_TICK_MS
         daily.usedMs += HEARTBEAT_TICK_MS
+
+        if (isSessionPauseDue(site.config, session)) {
+          activateSessionPause(session, now)
+          return createSessionPauseDecision(site.config, site.domain, daily, session)
+        }
       }
     }
 
@@ -327,7 +380,7 @@ async function handleAddFiveMinutes(request: ExtensionRequest, tabId: number): P
     includeTab(session, tabId)
 
     const blockReason = getTimeBlockReason(config, daily, session)
-    if (!blockReason) {
+    if (blockReason !== 'daily_limit') {
       return { success: false, reason: 'not_blocked_by_time' }
     }
 
@@ -343,6 +396,19 @@ async function handleAddFiveMinutes(request: ExtensionRequest, tabId: number): P
 
     return { success: true }
   })
+}
+
+async function handleCloseTab(tabId: number): Promise<{ success: boolean }> {
+  if (tabId < 0) {
+    return { success: false }
+  }
+
+  try {
+    await chrome.tabs.remove(tabId)
+    return { success: true }
+  } catch {
+    return { success: false }
+  }
 }
 
 async function handleGetOptionsData(): Promise<StorageState> {
@@ -554,6 +620,11 @@ chrome.runtime.onMessage.addListener((request: ExtensionRequest, sender, sendRes
       }
       case 'ADD_FIVE_MINUTES': {
         const result = await handleAddFiveMinutes(request, tabId)
+        sendResponse(result)
+        return
+      }
+      case 'CLOSE_TAB': {
+        const result = await handleCloseTab(tabId)
         sendResponse(result)
         return
       }
