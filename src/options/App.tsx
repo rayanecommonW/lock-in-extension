@@ -295,7 +295,7 @@ export default function App() {
                   onChange={(event) => onInput('bonusMode', event.target.value as SiteConfig['bonusMode'])}
                 >
                   <option value="strict">strict</option>
-                  <option value="bitchless_mf">bitchless mf</option>
+                  <option value="bitch_mode">im a bitch</option>
                 </select>
               </label>
             </div>
@@ -354,7 +354,7 @@ export default function App() {
                         <div>daily: {minsLabel(site.dailyLimitMinutes)}</div>
                         <div>session: {minsLabel(site.sessionLimitMinutes)}</div>
                         <div>opens/day: {site.openLimitPerDay ?? 'off'}</div>
-                        <div>mode: {site.bonusMode === 'strict' ? 'strict' : 'bitchless mf'}</div>
+                        <div>mode: {site.bonusMode === 'strict' ? 'strict' : 'im a bitch'}</div>
                       </td>
                       <td>
                         <div>{Math.floor(stat.usedMs / 60000)} min used</div>

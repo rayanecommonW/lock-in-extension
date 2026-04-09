@@ -113,7 +113,7 @@ function toDecision(config: SiteConfig, domain: string, daily: DailyStat, sessio
       action: 'block',
       matchedDomain: domain,
       reason: timeReason,
-      canAddFive: config.bonusMode === 'bitchless_mf',
+      canAddFive: config.bonusMode === 'bitch_mode',
       openCount: daily.openCount,
       openLimit,
     }
@@ -184,6 +184,7 @@ function sanitizeSiteConfig(input: SiteConfig): SiteConfig | null {
   const normalizedSession = input.sessionLimitMinutes === null ? null : Math.max(0, Math.floor(input.sessionLimitMinutes))
   const normalizedOpen = input.openLimitPerDay === null ? null : Math.max(0, Math.floor(input.openLimitPerDay))
   const reflectDelaySeconds = Math.max(0, Math.floor(input.reflectDelaySeconds))
+  const rawBonusMode = String(input.bonusMode)
 
   return {
     domain,
@@ -193,7 +194,7 @@ function sanitizeSiteConfig(input: SiteConfig): SiteConfig | null {
     openLimitPerDay: normalizedOpen,
     reflectDelaySeconds,
     reflectMessage: input.reflectMessage.trim() || 'Are you sure you want to spend time on this site?',
-    bonusMode: input.bonusMode === 'bitchless_mf' ? 'bitchless_mf' : 'strict',
+    bonusMode: rawBonusMode === 'strict' ? 'strict' : 'bitch_mode',
   }
 }
 
@@ -313,7 +314,7 @@ async function handleAddFiveMinutes(request: ExtensionRequest, tabId: number): P
       return { success: false, reason: 'unknown_domain' }
     }
 
-    if (config.bonusMode !== 'bitchless_mf') {
+    if (config.bonusMode !== 'bitch_mode') {
       return { success: false, reason: 'strict_mode' }
     }
 
@@ -449,10 +450,20 @@ async function handleGetDashboardData(request: ExtensionRequest): Promise<Record
     })
 
     let activeSummary: Record<string, unknown> | null = null
+    let activeDomain: string | null = null
+    let activeHasRule = false
+
     if (request.activeUrl) {
-      const site = getSiteFromUrl(request.activeUrl, state)
-      if (site) {
-        activeSummary = summaries.find((summary) => summary.domain === site.domain) ?? null
+      const host = parseDomainFromUrl(request.activeUrl)
+      if (host) {
+        activeDomain = host
+
+        const matchedDomain = findMatchingConfigDomain(host, state.siteConfigs)
+        if (matchedDomain) {
+          activeHasRule = true
+          activeDomain = matchedDomain
+          activeSummary = summaries.find((summary) => summary.domain === matchedDomain) ?? null
+        }
       }
     }
 
@@ -460,6 +471,8 @@ async function handleGetDashboardData(request: ExtensionRequest): Promise<Record
       settings: state.settings,
       totalSites: domains.length,
       activeSummary,
+      activeDomain,
+      activeHasRule,
       summaries,
     }
   })

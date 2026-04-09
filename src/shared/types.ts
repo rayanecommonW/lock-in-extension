@@ -1,4 +1,4 @@
-export type BonusMode = 'strict' | 'bitchless_mf'
+export type BonusMode = 'strict' | 'bitch_mode'
 
 export interface SiteConfig {
   domain: string

@@ -4,13 +4,13 @@ Lock In is a Chromium browser extension that helps limit distracting browsing wi
 
 You configure per-site rules:
 
-- Daily time limit (optional)
+- Max limit per day (optional)
 - Session time limit (optional)
 - Open limit per day (optional)
 - Reflect delay + custom message
 - Mode:
   - `strict`: no bonus time when limit is reached
-  - `bitchless mf`: allow repeated `Add 5 minutes` actions
+  - `im a bitch`: allow repeated `Add 5 minutes` actions
 
 It also supports:
 
@@ -79,7 +79,7 @@ For each visit/check:
 
 - When blocked by a time limit:
   - `strict` mode: only `Leave`
-  - `bitchless mf` mode: `Add 5 minutes` + `Leave`
+  - `im a bitch` mode: `Add 5 minutes` + `Leave`
 - After successful add-5, reflect modal is required again before browsing.
 
 ## Tech Stack
@@ -125,7 +125,7 @@ bun run dev
 1. Open extension popup.
 2. Click `Open full settings`.
 3. Add a domain and configure limits.
-4. Choose mode (`strict` or `bitchless mf`).
+4. Choose mode (`strict` or `im a bitch`).
 5. Set reflect delay/message.
 6. Keep extension ON.
 7. Browse tracked site and verify reflect + blocking behavior.

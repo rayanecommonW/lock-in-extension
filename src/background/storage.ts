@@ -19,8 +19,33 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+type SiteConfigCompat = Omit<SiteConfig, 'bonusMode'> & {
+  bonusMode?: unknown
+}
+
 function asSiteConfigs(value: unknown): Record<string, SiteConfig> {
-  return isObject(value) ? (value as Record<string, SiteConfig>) : {}
+  if (!isObject(value)) {
+    return {}
+  }
+
+  const rawConfigs = value as Record<string, SiteConfigCompat>
+  const normalizedConfigs: Record<string, SiteConfig> = {}
+
+  for (const domain of Object.keys(rawConfigs)) {
+    const config = rawConfigs[domain]
+    if (!isObject(config)) {
+      continue
+    }
+
+    const normalizedBonusMode = config.bonusMode === 'strict' ? 'strict' : 'bitch_mode'
+
+    normalizedConfigs[domain] = {
+      ...(config as SiteConfig),
+      bonusMode: normalizedBonusMode,
+    }
+  }
+
+  return normalizedConfigs
 }
 
 function asDailyStats(value: unknown): Record<string, DailyStat> {
