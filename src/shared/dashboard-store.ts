@@ -81,21 +81,37 @@ export const useDashboardStore = create<DashboardStore>((set, get) => ({
               ? null
               : Math.max(0, state.liveSnapshot.dailyRemainingMs - elapsedMs)
 
-            const mergedUsedMs = Math.max(serverUsedMs, optimisticUsedMs)
-            let mergedRemainingMs: number | null
-            if (serverRemainingMs === null) {
-              mergedRemainingMs = null
-            } else if (optimisticRemainingMs === null) {
-              mergedRemainingMs = serverRemainingMs
-            } else {
-              mergedRemainingMs = Math.min(serverRemainingMs, optimisticRemainingMs)
-            }
+            const usedCounterReset = serverUsedMs < state.liveSnapshot.usedTodayMs
+            const remainingCounterReset = (
+              serverRemainingMs !== null
+              && state.liveSnapshot.dailyRemainingMs !== null
+              && serverRemainingMs > state.liveSnapshot.dailyRemainingMs
+            )
 
-            nextSnapshot = {
-              domain: payload.activeSummary.domain,
-              capturedAtMs: nowMs,
-              usedTodayMs: mergedUsedMs,
-              dailyRemainingMs: mergedRemainingMs,
+            if (usedCounterReset || remainingCounterReset) {
+              nextSnapshot = {
+                domain: payload.activeSummary.domain,
+                capturedAtMs: nowMs,
+                usedTodayMs: serverUsedMs,
+                dailyRemainingMs: serverRemainingMs,
+              }
+            } else {
+              const mergedUsedMs = Math.max(serverUsedMs, optimisticUsedMs)
+              let mergedRemainingMs: number | null
+              if (serverRemainingMs === null) {
+                mergedRemainingMs = null
+              } else if (optimisticRemainingMs === null) {
+                mergedRemainingMs = serverRemainingMs
+              } else {
+                mergedRemainingMs = Math.min(serverRemainingMs, optimisticRemainingMs)
+              }
+
+              nextSnapshot = {
+                domain: payload.activeSummary.domain,
+                capturedAtMs: nowMs,
+                usedTodayMs: mergedUsedMs,
+                dailyRemainingMs: mergedRemainingMs,
+              }
             }
           }
         }

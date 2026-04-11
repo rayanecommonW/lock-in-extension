@@ -136,6 +136,10 @@ export interface GetDashboardDataRequest {
   activeUrl?: string
 }
 
+export interface ResetDayStatsRequest {
+  type: 'RESET_DAY_STATS'
+}
+
 export type ExtensionRequest =
   | CheckAccessRequest
   | CompleteReflectRequest
@@ -147,3 +151,4 @@ export type ExtensionRequest =
   | DeleteSiteRequest
   | UpdateSettingsRequest
   | GetDashboardDataRequest
+  | ResetDayStatsRequest

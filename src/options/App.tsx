@@ -131,6 +131,7 @@ export default function App() {
   const [dailyStats, setDailyStats] = useState<Record<string, DailyStat>>({})
   const [form, setForm] = useState<FormState>(emptyForm)
   const [status, setStatus] = useState('')
+  const [resettingDay, setResettingDay] = useState(false)
   const loadInFlightRef = useRef(false)
 
   const orderedSites = useMemo(() => Object.values(siteConfigs).sort((a, b) => a.domain.localeCompare(b.domain)), [siteConfigs])
@@ -346,6 +347,34 @@ export default function App() {
     }
   }
 
+  const onResetDay = async () => {
+    if (resettingDay) {
+      return
+    }
+
+    setResettingDay(true)
+    try {
+      const result = await sendRuntimeMessage<{ success: boolean }>({
+        type: 'RESET_DAY_STATS',
+      })
+
+      if (!result.success) {
+        setStatus('Failed to reset today counters')
+        return
+      }
+
+      setStatus('Today timer and opens were reset')
+      await load()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      setStatus(`Failed to reset today counters: ${message}`)
+    } finally {
+      setResettingDay(false)
+    }
+  }
+
+  const todayKey = toLocalDateKey()
+
   return (
     <main className="layout">
       <header className="header">
@@ -552,6 +581,7 @@ export default function App() {
               <tbody>
                 {orderedSites.map((site) => {
                   const stat = readDailyStat(dailyStats, site.domain)
+                  const todaySlice = statSliceForDate(stat, todayKey)
                   return (
                     <tr key={site.domain}>
                       <td>
@@ -566,8 +596,8 @@ export default function App() {
                         <div>mode: {site.bonusMode === 'strict' ? 'strict' : 'im a bitch'}</div>
                       </td>
                       <td>
-                        <div>{formatDurationMs(stat.usedMs)} used</div>
-                        <div>{stat.openCount} opens</div>
+                        <div>{formatDurationMs(todaySlice.usedMs)} used</div>
+                        <div>{todaySlice.openCount} opens</div>
                       </td>
                       <td>
                         <div className="btnRow">
@@ -587,6 +617,22 @@ export default function App() {
           </p>
         </section>
       </div>
+
+      <section className="card" style={{ marginTop: 14 }}>
+        <h2>Manual reset</h2>
+        <p className="footerNote">
+          If today counters look wrong, clear today timer and today opens for all tracked sites.
+        </p>
+        <div className="btnRow">
+          <button
+            className="btnGhost"
+            onClick={() => void onResetDay()}
+            disabled={resettingDay}
+          >
+            {resettingDay ? 'Resetting...' : 'Reset for the day'}
+          </button>
+        </div>
+      </section>
     </main>
   )
 }

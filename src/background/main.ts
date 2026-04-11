@@ -19,7 +19,9 @@ import {
 } from '@/shared/utils'
 
 const CLEANUP_ALARM = 'lock-in-cleanup'
+const MIDNIGHT_RESET_ALARM = 'lock-in-midnight-reset'
 const ONE_MINUTE = 1
+const ONE_MINUTE_MS = 60_000
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
 const HISTORY_RETENTION_DAYS = 35
 const BONUS_FIVE_MINUTES_MS = 5 * 60_000
@@ -109,6 +111,24 @@ function ensureDailyStat(state: StorageState, domain: string, dateKey: string): 
 function runDailyReset(state: StorageState, dateKey: string): void {
   for (const domain of Object.keys(state.dailyStats)) {
     ensureDailyStat(state, domain, dateKey)
+  }
+}
+
+function resetTodayStats(state: StorageState, dateKey: string): void {
+  runDailyReset(state, dateKey)
+
+  for (const domain of Object.keys(state.siteConfigs)) {
+    const stat = ensureDailyStat(state, domain, dateKey)
+    stat.usedMs = 0
+    stat.openCount = 0
+    stat.bonusMs = 0
+  }
+
+  for (const domain of Object.keys(state.dailyStats)) {
+    const stat = ensureDailyStat(state, domain, dateKey)
+    stat.usedMs = 0
+    stat.openCount = 0
+    stat.bonusMs = 0
   }
 }
 
@@ -515,6 +535,17 @@ async function handleUpdateSettings(request: ExtensionRequest): Promise<{ succes
   })
 }
 
+async function handleResetDayStats(request: ExtensionRequest): Promise<{ success: boolean }> {
+  if (request.type !== 'RESET_DAY_STATS') {
+    return { success: false }
+  }
+
+  return mutateState(async (state) => {
+    resetTodayStats(state, toLocalDateKey())
+    return { success: true }
+  })
+}
+
 async function handleGetDashboardData(request: ExtensionRequest): Promise<DashboardData> {
   if (request.type !== 'GET_DASHBOARD_DATA') {
     return {
@@ -610,19 +641,45 @@ function scheduleCleanupAlarm(): void {
   chrome.alarms.create(CLEANUP_ALARM, { periodInMinutes: ONE_MINUTE })
 }
 
+function getMinutesUntilNextLocalMidnight(now = new Date()): number {
+  const nextMidnight = new Date(now)
+  nextMidnight.setHours(24, 0, 0, 0)
+
+  return Math.max(ONE_MINUTE, Math.ceil((nextMidnight.getTime() - now.getTime()) / ONE_MINUTE_MS))
+}
+
+function scheduleMidnightResetAlarm(): void {
+  chrome.alarms.create(MIDNIGHT_RESET_ALARM, {
+    delayInMinutes: getMinutesUntilNextLocalMidnight(),
+  })
+}
+
+function scheduleBackgroundAlarms(): void {
+  scheduleCleanupAlarm()
+  scheduleMidnightResetAlarm()
+}
+
 chrome.runtime.onInstalled.addListener(async () => {
   await ensureStorageInitialized()
-  scheduleCleanupAlarm()
+  scheduleBackgroundAlarms()
 })
 
 chrome.runtime.onStartup.addListener(async () => {
   await ensureStorageInitialized()
-  scheduleCleanupAlarm()
+  scheduleBackgroundAlarms()
 })
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === CLEANUP_ALARM) {
     await cleanupSessions()
+    return
+  }
+
+  if (alarm.name === MIDNIGHT_RESET_ALARM) {
+    await mutateState(async (state) => {
+      runDailyReset(state, toLocalDateKey())
+    })
+    scheduleMidnightResetAlarm()
   }
 })
 
@@ -688,6 +745,11 @@ chrome.runtime.onMessage.addListener((request: ExtensionRequest, sender, sendRes
         sendResponse(result)
         return
       }
+      case 'RESET_DAY_STATS': {
+        const result = await handleResetDayStats(request)
+        sendResponse(result)
+        return
+      }
       case 'GET_DASHBOARD_DATA': {
         const result = await handleGetDashboardData(request)
         sendResponse(result)
@@ -702,6 +764,6 @@ chrome.runtime.onMessage.addListener((request: ExtensionRequest, sender, sendRes
 })
 
 void ensureStorageInitialized().then(() => {
-  scheduleCleanupAlarm()
+  scheduleBackgroundAlarms()
 })
 
